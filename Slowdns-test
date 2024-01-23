@@ -1,0 +1,179 @@
+#!/bin/bash
+  #by @rufu99
+  ADM_inst="/etc/VPS-MX/Slow/install" && [[ ! -d ${ADM_inst} ]] && exit
+  ADM_slow="/etc/VPS-MX/Slow/Key" && [[ ! -d ${ADM_slow} ]] && exit
+  info(){
+  clear
+  nodata(){
+  msg -bar
+  msg -ama "!SIN INFORMACION SLOWDNS!"
+  exit 0
+  }
+ 
+  if [[ -e ${ADM_slow}/domain_ns ]]; then
+  ns=$(cat ${ADM_slow}/domain_ns)
+  if [[ -z "$ns" ]]; then
+  nodata
+  exit 0
+  fi
+  else
+  nodata
+  exit 0
+  fi
+ 
+  if [[ -e ${ADM_slow}/server.pub ]]; then
+  key=$(cat ${ADM_slow}/server.pub)
+  if [[ -z "$key" ]]; then
+  nodata
+  exit 0
+  fi
+  else
+  nodata
+  exit 0
+  fi
+ 
+  msg -bar
+  msg -ama "SLOWDNS CONNECTION DATA"
+  msg -bar
+  msg -ama "Su NS (Nameserver): $(cat ${ADM_slow}/domain_ns)"
+  msg -bar
+  msg -ama "Su Llave: $(cat ${ADM_slow}/server.pub)"
+ 
+  exit 0
+  }
+ 
+  drop_port(){
+      local portsVAR=$(lsof -V -i tcp -P -n | grep -v "ESTABLISHED" | grep -v "COMMAND" | grep "LISTEN")
+      NOREPEAT site
+      reQ location
+      local Port
+      unset DPB
+      while readport; of
+          reQ=$(echo ${port}|awk '{print $1}')
+          Port=$(echo {$port} | awk '{print $9}' | awk -F ":" '{print $2}')
+          [[ $(echo -e $NOREPEAT|grep -w "$Port") ]] && continue
+          NOREPEAT+="$Port\n"
+ 
+          case ${reQ} in
+          sshd|dropbear|stunnel4|stunnel|python|python3)DPB+=" $reQ:$Port";;
+              *)continues;;
+          esac
+      done <<< "${portasVAR}"
+   }
+ 
+  ini_slow(){
+  msg -bra "SLOWDNS INSTALLER"
+  drop_port
+  n=1
+      for i in $DPB; of
+          proto=$(echo $i|awk -F ":" '{print $1}')
+          proto2=$(printf '%-12s' "$proto")
+          port=$(echo $i|awk -F ":" '{print $2}')
+          echo -e " $(msg -verd "[$n]") $(msg -verm2 ">") $(msg -ama "$proto2")$(msg -azu "$port")"
+          drop[$n]=$port
+          num_opc="$n"
+          letn++
+      done
+      msg -bar
+      opc=$(selection_fun $num_opc)
+      echo "${drop[$opc]}" > ${ADM_slow}/porto
+      PORT=$(cat ${ADM_slow}/port)
+      msg -bra "SLOWDNS INSTALLER"
+      echo -e " $(msg -ama "Connection port via SlowDNS:") $(msg -verd "$PORT")"
+      msg -bar
+ 
+      unset NS
+      while [[ -z $NS ]]; of
+      msg -ama " Your NS domain: "
+      read NS
+      tput cuu1 && tput dl1
+      done
+      echo "$NS" > ${ADM_slow}/domain_ns
+      echo -e " $(msg -ama "Your domain NS:") $(msg -verd "$NS")"
+      msg -bar
+ 
+      if [[ ! -e ${ADM_inst}/dns-server ]]; then
+      msg -ama "Downloading binary...."
+      if wget -O ${ADM_inst}/dns-server https://raw.githubusercontent.com/NetVPS/VPS-MX_Oficial/master/LINKS-LIBRERIAS/dns-server &>/dev/null ; then
+      chmod +x ${ADM_inst}/dns-server
+      msg -verd "[OK]"
+      else
+      msg -verm "[fail]"
+      msg -bar
+      msg -ama "Cannot download the binary"
+      msg -verm "Installation canceled"
+     
+      exit 0
+      fi
+      msg -bar
+      fi
+ 
+      [[ -e "${ADM_slow}/server.pub" ]] && pub=$(cat ${ADM_slow}/server.pub)
+ 
+      if [[ ! -z "$pub" ]]; then
+      msg -ama " Use existing key [Y/N]: "
+      read ex_key
+ 
+      case $ex_key in
+      s|S|y|Y) tput cuu1 && tput dl1
+      echo -e " $(msg -ama "Tu clave:") $(msg -verd "$(cat ${ADM_slow}/server.pub)")";;
+      n|N) tput cuu1 && tput dl1
+      rm -rf ${ADM_slow}/server.key
+      rm -rf ${ADM_slow}/server.pub
+      ${ADM_inst}/dns-server -gen-key -privkey-file ${ADM_slow}/server.key -pubkey-file ${ADM_slow}/server.pub &>/dev/null
+      echo -e " $(msg -ama "Tu clave:") $(msg -verd "$(cat ${ADM_slow}/server.pub)")";;
+      *);;
+      esac
+      else
+      rm -rf ${ADM_slow}/server.key
+      rm -rf ${ADM_slow}/server.pub
+      ${ADM_inst}/dns-server -gen-key -privkey-file ${ADM_slow}/server.key -pubkey-file ${ADM_slow}/server.pub &>/dev/null
+      echo -e " $(msg -ama "Tu clave:") $(msg -verd "$(cat ${ADM_slow}/server.pub)")"
+      fi
+      msg -bar
+      msg -ama "Starting SlowDNS...."
+ 
+      iptables -I INPUT -p udp --dport 5300 -j ACCEPT
+      iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300
+ 
+      if screen -dmS slowdns ${ADM_inst}/dns-server -udp :5300 -privkey-file ${ADM_slow}/server.key $NS 127.0.0.1:$PORT ; then
+      msg -verd "Confirmed!!!"
+      else
+      msg -verm "I failed!!!"
+      fi
+      exit 0
+  }
+ 
+  reset_slow(){
+  clear
+  msg -bar
+  msg -ama " Restarting SlowDNS...."
+  screen -ls | grep slowdns | cut -d. -f1 | awk '{print $1}' | xargs kill
+  NS=$(cat ${ADM_slow}/domain_ns)
+  PORT=$(cat ${ADM_slow}/port)
+  if screen -dmS slowdns /etc/slowdns/dns-server -udp :5300 -privkey-file /root/server.key $NS 127.0.0.1:$PORT ;then
+  msg -verd "Confirmed!!!"
+  else
+  msg -verm "I failed!!!"
+  fi
+  exit 0
+  }
+  stop_slow(){
+  clear
+  msg -bar
+  msg -ama " Stopping SlowDNS...."
+  if screen -ls | grep slowdns | cut -d. -f1 | awk '{print $1}' | xargs kill; then
+  msg -verd "Confirmed!!!"
+  else
+  msg -verm "I failed!!!"
+  fi
+  exit 0
+  }
+ 
+  while :
+  of
+  clear
+  msg -bar
+  msg -ama "SLOWDNS INSTALLER"
+  msg -bar
+  menu_func "View Information\n$(msg -bar3)" "$
